@@ -1,0 +1,22 @@
+# Segredos e ambientes locais — nunca commitar
+.env
+.env.*
+!.env.example
+
+# Dependências
+node_modules
+
+# Next.js
+.next
+out
+
+# Builds e cache
+*.tsbuildinfo
+
+# SO
+.DS_Store
+Thumbs.db
+
+# Logs
+npm-debug.log*
+*.log

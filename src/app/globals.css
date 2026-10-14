@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Tokens de design — Study Manager (docs/DESIGN_SYSTEM.md) */
+:root {
+  /* Light mode — valores convertidos para HSL */
+  --bg-app: 240 5% 97%;          /* #F7F7F8 */
+  --bg-surface: 0 0% 100%;       /* #FFFFFF */
+  --bg-subtle: 220 14% 96%;      /* #F3F4F6 */
+  --text-primary: 240 6% 10%;    /* #18181B */
+  --text-secondary: 240 4% 46%;  /* #71717A */
+  --text-muted: 240 5% 65%;      /* #A1A1AA */
+  --border: 240 6% 90%;          /* #E4E4E7 */
+  --indigo: 243 75% 59%;         /* #4F46E5 */
+  --indigo-soft: 228 100% 97%;   /* #EEF2FF */
+  --success: 142 72% 36%;        /* #16A34A */
+}
+
+.dark {
+  --bg-app: 240 6% 5%;           /* #0C0C0E */
+  --bg-surface: 240 5% 10%;      /* #17171A */
+  --bg-subtle: 240 7% 15%;       /* #252529 */
+  --text-primary: 240 4% 96%;    /* #F4F4F5 */
+  --text-secondary: 240 5% 65%;  /* #A1A1AA */
+  --text-muted: 240 4% 46%;      /* #71717A */
+  --border: 240 6% 19%;          /* #2D2D32 */
+  --indigo: 243 75% 59%;         /* #4F46E5 */
+  --indigo-soft: 243 31% 19%;    /* #24213D */
+  --success: 142 72% 36%;        /* #16A34A */
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  @apply bg-app text-[hsl(var(--text-primary))] font-sans antialiased;
+}
+
+/* Scrollbar discreta */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border)) transparent;
+}
