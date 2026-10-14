@@ -129,8 +129,10 @@ ALTER TABLE "planned_blocks"          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "study_sessions"          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "session_breaks"          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "saved_materials"         ENABLE ROW LEVEL SECURITY;
-
--- materiais é catálogo compartilhado: RLS não habilitado (leitura global; escrita via service_role).
+-- materials: catálogo compartilhado. RLS habilitado (sem RLS, a anon key poderia
+-- inserir/alterar/apagar via PostgREST). Só leitura via policy (abaixo); escrita
+-- apenas pelo servidor (Prisma/service_role).
+ALTER TABLE "materials"               ENABLE ROW LEVEL SECURITY;
 
 -- policies simples para tabelas com user_id/id do próprio usuário
 -- (também condicionais ao schema auth: CREATE POLICY referencia auth.uid(),
@@ -161,6 +163,12 @@ BEGIN
         t || '_self', t
       );
     END LOOP;
+
+    -- materials: leitura do catálogo global (owner_id NULL) e dos itens do próprio usuário
+    EXECUTE $policy$
+      CREATE POLICY materials_read ON "materials"
+      FOR SELECT USING (owner_id IS NULL OR owner_id = auth.uid())
+    $policy$;
 
     -- session_breaks: pertence ao usuário via study_sessions
     EXECUTE $policy$
@@ -204,18 +212,24 @@ BEGIN
     SET search_path = ''
     AS $fn$
     BEGIN
-      INSERT INTO "public"."profiles" ("id", "name")
+      -- updated_at é NOT NULL sem default no banco (@updatedAt do Prisma): informar explicitamente.
+      -- Nome limitado a 200 caracteres (metadata do signUp é controlado pelo cliente).
+      INSERT INTO "public"."profiles" ("id", "name", "updated_at")
       VALUES (
         NEW."id",
-        COALESCE(
-          NEW."raw_user_meta_data" ->> 'name',
+        left(COALESCE(
+          NULLIF(btrim(NEW."raw_user_meta_data" ->> 'name'), ''),
           split_part(NEW."email", '@', 1)
-        )
+        ), 200),
+        CURRENT_TIMESTAMP
       )
       ON CONFLICT ("id") DO NOTHING;
       RETURN NEW;
     END;
     $fn$;
+
+    -- Função de trigger não deve ser invocável diretamente por clientes.
+    REVOKE ALL ON FUNCTION public.handle_new_user() FROM PUBLIC, anon, authenticated;
 
     DROP TRIGGER IF EXISTS "on_auth_user_created" ON "auth"."users";
     CREATE TRIGGER "on_auth_user_created"

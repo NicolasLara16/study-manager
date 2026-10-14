@@ -18,5 +18,5 @@ export function createSupabaseBrowserClient(): SupabaseClient | null {
   const config = getSupabasePublicConfig();
   if (!config) return null;
 
-  return createBrowserClient(config.url, config.anonKey);
+  return createBrowserClient(config.url, config.key);
 }

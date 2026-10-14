@@ -30,7 +30,7 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   // de volta nos cookies da resposta (padrão do @supabase/ssr).
   let supabaseResponse = NextResponse.next({ request });
 
-  const supabase = createServerClient(config.url, config.anonKey, {
+  const supabase = createServerClient(config.url, config.key, {
     cookies: {
       getAll() {
         return request.cookies.getAll();

@@ -10,8 +10,11 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
-    "db:validate": "prisma validate"
+    "db:validate": "node --env-file=.env.local node_modules/prisma/build/index.js validate",
+    "db:status": "node --env-file=.env.local node_modules/prisma/build/index.js migrate status",
+    "db:deploy": "node --env-file=.env.local node_modules/prisma/build/index.js migrate deploy",
+    "db:diff:init": "prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script",
+    "test:db": "node --env-file=.env.local node_modules/vitest/vitest.mjs run"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

@@ -21,7 +21,7 @@ export function createSupabaseServerClient(): SupabaseClient | null {
 
   const cookieStore = cookies();
 
-  return createServerClient(config.url, config.anonKey, {
+  return createServerClient(config.url, config.key, {
     cookies: {
       getAll() {
         return cookieStore.getAll();

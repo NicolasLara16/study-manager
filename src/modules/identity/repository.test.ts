@@ -26,13 +26,23 @@ describe.skipIf(!process.env.DATABASE_URL)(
       db = dbModule.db;
     });
 
-    beforeEach(() => {
+    // profiles.id tem FK para auth.users: cada teste cria identidades transitórias
+    // (e-mail @example.invalid) e as remove no afterEach — a cascata limpa o resto.
+    // O trigger on_auth_user_created já cria o perfil; ele é removido para que cada
+    // teste parta sem perfil e exercite o repository.
+    beforeEach(async () => {
       userA = randomUUID();
       userB = randomUUID();
+      for (const id of [userA, userB]) {
+        await db.$executeRaw`
+          INSERT INTO auth.users (id, email, raw_user_meta_data, aud, role)
+          VALUES (${id}::uuid, ${`it-${id}@example.invalid`}, '{}'::jsonb, 'authenticated', 'authenticated')`;
+      }
+      await db.profile.deleteMany({ where: { id: { in: [userA, userB] } } });
     });
 
     afterEach(async () => {
-      await db.profile.deleteMany({ where: { id: { in: [userA, userB] } } });
+      await db.$executeRaw`DELETE FROM auth.users WHERE id IN (${userA}::uuid, ${userB}::uuid)`;
     });
 
     it("getProfile não cruza dados: perfil de A é invisível para consulta de B", async () => {

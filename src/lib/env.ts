@@ -7,14 +7,22 @@
  * - Leitura preguiçosa: nada lança no import, para o build passar sem `.env`
  *   (ex.: CI, preview de protótipo). Quem usar chama o getter e trata o caso.
  * - `NEXT_PUBLIC_*` é público por definição: nunca colocar segredo nesses nomes.
+ *
+ * Chaves públicas do Supabase:
+ * - PREFERIDA: `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (novo padrão do Supabase).
+ * - FALLBACK LEGADO: `NEXT_PUBLIC_SUPABASE_ANON_KEY` (aceita, mas deprecada).
+ * - Chave que pareça SECRETA (`sb_secret_...` ou JWT com role service_role)
+ *   é REJEITADA com erro claro: colar segredo em var NEXT_PUBLIC_ expõe o
+ *   valor no bundle do browser.
  */
 
 import { z } from "zod";
 
-/** Variáveis SUPABASE públicas (browser + server). */
+/** Variáveis SUPABASE públicas (browser + server). Ambas as chaves são opcionais: a escolha é resolvida em runtime (publishable > anon). */
 export const publicEnvSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1).optional(),
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: z.string().min(1).optional(),
 });
 
 /** Variáveis de servidor — nunca devem receber prefixo NEXT_PUBLIC_. */
@@ -28,7 +36,8 @@ export const serverEnvSchema = z.object({
 
 export type SupabasePublicConfig = {
   url: string;
-  anonKey: string;
+  /** Chave pública em uso (publishable preferida; anon como fallback legado). */
+  key: string;
 };
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
@@ -42,33 +51,82 @@ function formatIssues(error: z.ZodError<unknown>): string {
   return `Variáveis de ambiente inválidas (${problems.join("; ")}).`;
 }
 
-let cachedPublic: SupabasePublicConfig | null = null;
-let cachedPublicLookup = false;
+/**
+ * Detecta chave SECRETA colada em variável pública:
+ * - prefixo "sb_secret_" (novo formato de chave secreta do Supabase);
+ * - JWT cujo payload declara role "service_role" (formato legado).
+ */
+export function looksLikeSecretKey(value: string): boolean {
+  if (value.startsWith("sb_secret_")) return true;
+
+  const parts = value.split(".");
+  if (parts.length !== 3) return false; // Só inspeção de JWT é necessária.
+
+  try {
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+    const decode = (s: string) =>
+      typeof atob === "function" ? atob(s) : Buffer.from(s, "base64").toString("utf8");
+    const payload = JSON.parse(decode(padded)) as { role?: unknown };
+    return payload?.role === "service_role";
+  } catch {
+    return false;
+  }
+}
+
+type PublicCache =
+  | { status: "ok"; config: SupabasePublicConfig }
+  | { status: "none" }
+  | { status: "error"; error: Error };
+
+function evaluatePublicEnv(): PublicCache {
+  const keyEnv =
+    publicEnvSchema.safeParse({
+      NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+    });
+  if (!keyEnv.success) return { status: "none" };
+
+  const url = keyEnv.data.NEXT_PUBLIC_SUPABASE_URL;
+  // Preferência explícita: publishable (novo padrão) > anon (legado).
+  const publishable = keyEnv.data.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  const anon = keyEnv.data.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const key = publishable ?? anon;
+  if (!key) return { status: "none" };
+  const keyEnvName = publishable
+    ? "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"
+    : "NEXT_PUBLIC_SUPABASE_ANON_KEY";
+
+  if (looksLikeSecretKey(key)) {
+    // Falha LOUD e explicativa: é uma configuração errada, não apenas ausente.
+    return {
+      status: "error",
+      error: new Error(
+        `${keyEnvName} contém o que parece ser uma chave SECRETA (prefixo "sb_secret_" ou JWT com role "service_role"). ` +
+          "Nunca coloque segredo em variável NEXT_PUBLIC_: o valor é exposto no bundle do browser. " +
+          "Use a chave publishable (preferida) ou anon do projeto Supabase; a chave secreta pertence somente ao servidor."
+      ),
+    };
+  }
+
+  return { status: "ok", config: { url, key } };
+}
+
+let cachedPublic: PublicCache | undefined;
 
 /**
- * Configuração pública do Supabase, ou `null` quando ausente/inválida.
+ * Configuração pública do Supabase ({ url, key }), ou `null` quando ausente.
+ * Lança erro claro se uma chave SECRETA foi colada em variável pública.
  * Cacheado por import (os testes fazem `vi.resetModules()` para recarregar).
  */
 export function getSupabasePublicConfig(): SupabasePublicConfig | null {
-  // Cache do "não configurado": o resultado é estável por módulo
-  // (os testes fazem `vi.resetModules()` para recarregar).
-  if (!cachedPublicLookup) {
-    cachedPublicLookup = true;
-    const parsed = publicEnvSchema.safeParse({
-      NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    });
-    cachedPublic = parsed.success
-      ? {
-          url: parsed.data.NEXT_PUBLIC_SUPABASE_URL,
-          anonKey: parsed.data.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-        }
-      : null;
-  }
-  return cachedPublic;
+  cachedPublic ??= evaluatePublicEnv();
+  if (cachedPublic.status === "error") throw cachedPublic.error;
+  return cachedPublic.status === "ok" ? cachedPublic.config : null;
 }
 
-/** `true` quando há configuração pública do Supabase (URL + anon key válidos). */
+/** `true` quando há configuração pública do Supabase (URL + chave pública válidos). */
 export function isSupabaseConfigured(): boolean {
   return getSupabasePublicConfig() !== null;
 }

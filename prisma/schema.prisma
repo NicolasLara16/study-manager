@@ -1,15 +1,16 @@
 // ============================================================
-// study-manager — schema v1 (Backend E1)
+// study-manager — schema v1 (Backend E1 / E1d)
 // Base: docs/fase2-relatorio-adm-eng.md §3 (prevalece sobre docs/fase2-modelagem-dados-oplogica.md)
 //
 // Decisões-chave:
 // - Sem tabela User: o e-mail vive em auth.users (Supabase). Profile.id = auth uid (sem default —
 //   o id é sempre o id da sessão, escrito por ensureProfile()/trigger de migração).
-// - Todas as durações em SEGUNDOS (calcadas nas sessões e settings); blocos planejados em minutos.
+// - Todas as durações em SEGUNDOS (sessões e settings); blocos planejados em minutos.
 // - userId desnormalizado em Discipline/Topic para filtro direto e políticas RLS.
 // - Exclusão de estrutura não apaga histórico: FKs de medição usam SetNull + snapshots de nome.
 // - Constraints não expressáveis no Prisma (índice parcial de sessão ativa, CHECKs) e RLS
 //   estão em prisma/sql/001_constraints_rls.sql (anexar à migration inicial; não executar aqui).
+// - @map/@map: colunas em snake_case no banco (a migration 001 referencia esses nomes).
 // ============================================================
 
 generator client {
@@ -98,41 +99,41 @@ enum ThemeChoice {
 // ------------------------------------------------------------------ identity
 
 model Profile {
-  id               String    @id @db.Uuid /// id = auth.users.id (Supabase); sem default
-  name             String
-  avatarUrl        String?
-  termsAcceptedAt  DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id              String    @id @db.Uuid /// id = auth.users.id (Supabase); sem default
+  name            String
+  avatarUrl       String?   @map("avatar_url")
+  termsAcceptedAt DateTime? @map("terms_accepted_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
-  settings             UserSettings?
-  goals                Goal[]
-  disciplines          Discipline[]
-  topics               Topic[]
-  weeklyGoals          WeeklyGoal[]
+  settings              UserSettings?
+  goals                 Goal[]
+  disciplines           Discipline[]
+  topics                Topic[]
+  weeklyGoals           WeeklyGoal[]
   disciplineWeeklyGoals DisciplineWeeklyGoal[]
-  plannedBlocks        PlannedBlock[]
-  sessions             StudySession[]
-  savedMaterials       SavedMaterial[]
-  ownedMaterials       Material[]
+  plannedBlocks         PlannedBlock[]
+  sessions              StudySession[]
+  savedMaterials        SavedMaterial[]
+  ownedMaterials        Material[]
 
   @@map("profiles")
 }
 
 model UserSettings {
-  userId                 String      @id @db.Uuid
+  userId                 String      @id @db.Uuid @map("user_id")
   timezone               String      @default("America/Sao_Paulo") @db.VarChar(64)
-  weeklyTargetMinutes    Int         @default(600)
-  dailyTargetMinutes     Int?
-  pomodoroFocusSec       Int         @default(1500)
-  pomodoroShortBreakSec  Int         @default(300)
-  pomodoroLongBreakSec   Int         @default(900)
-  cyclesBeforeLongBreak  Int         @default(4)
-  notifySessionReminders Boolean     @default(true)
-  timerSounds            Boolean     @default(true)
+  weeklyTargetMinutes    Int         @default(600) @map("weekly_target_minutes")
+  dailyTargetMinutes     Int?        @map("daily_target_minutes")
+  pomodoroFocusSec       Int         @default(1500) @map("pomodoro_focus_sec")
+  pomodoroShortBreakSec  Int         @default(300) @map("pomodoro_short_break_sec")
+  pomodoroLongBreakSec   Int         @default(900) @map("pomodoro_long_break_sec")
+  cyclesBeforeLongBreak  Int         @default(4) @map("cycles_before_long_break")
+  notifySessionReminders Boolean     @default(true) @map("notify_session_reminders")
+  timerSounds            Boolean     @default(true) @map("timer_sounds")
   theme                  ThemeChoice @default(system)
-  createdAt              DateTime    @default(now())
-  updatedAt              DateTime    @updatedAt
+  createdAt              DateTime    @default(now()) @map("created_at")
+  updatedAt              DateTime    @updatedAt @map("updated_at")
 
   profile Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -142,22 +143,22 @@ model UserSettings {
 // ------------------------------------------------------------------ goals
 
 model Goal {
-  id                  String    @id @default(uuid())
-  userId              String    @db.Uuid
-  title               String    @db.VarChar(200)
+  id                  String     @id @default(uuid())
+  userId              String     @db.Uuid @map("user_id")
+  title               String     @db.VarChar(200)
   description         String?
-  color               String    @default("#4F46E5") @db.VarChar(7)
+  color               String     @default("#4F46E5") @db.VarChar(7)
   status              GoalStatus @default(active)
-  targetDate          DateTime? @db.Date
-  weeklyTargetMinutes Int?
-  archivedAt          DateTime?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  targetDate          DateTime?  @db.Date @map("target_date")
+  weeklyTargetMinutes Int?       @map("weekly_target_minutes")
+  archivedAt          DateTime?  @map("archived_at")
+  createdAt           DateTime   @default(now()) @map("created_at")
+  updatedAt           DateTime   @updatedAt @map("updated_at")
 
-  profile    Profile    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profile     Profile     @relation(fields: [userId], references: [id], onDelete: Cascade)
   disciplines Discipline[]
-  sessions   StudySession[]
-  blocks     PlannedBlock[]
+  sessions    StudySession[]
+  blocks      PlannedBlock[]
   weeklyGoals WeeklyGoal[]
 
   @@index([userId, status])
@@ -166,20 +167,20 @@ model Goal {
 
 model Discipline {
   id         String    @id @default(uuid())
-  goalId     String
-  userId     String    @db.Uuid
+  goalId     String    @map("goal_id")
+  userId     String    @db.Uuid @map("user_id")
   name       String    @db.VarChar(200)
   position   Int       @default(0)
-  archivedAt DateTime?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  archivedAt DateTime? @map("archived_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
 
-  goal   Goal   @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  goal    Goal   @relation(fields: [goalId], references: [id], onDelete: Cascade)
   profile Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
-  topics             Topic[]
-  weeklyGoals        DisciplineWeeklyGoal[]
-  sessions           StudySession[]
-  blocks             PlannedBlock[]
+  topics      Topic[]
+  weeklyGoals DisciplineWeeklyGoal[]
+  sessions    StudySession[]
+  blocks      PlannedBlock[]
 
   @@unique([goalId, name])
   @@index([userId])
@@ -188,17 +189,17 @@ model Discipline {
 
 model Topic {
   id           String   @id @default(uuid())
-  disciplineId String
-  userId       String   @db.Uuid
+  disciplineId String   @map("discipline_id")
+  userId       String   @db.Uuid @map("user_id")
   name         String   @db.VarChar(200)
   position     Int      @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   discipline Discipline @relation(fields: [disciplineId], references: [id], onDelete: Cascade)
-  profile     Profile    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sessions StudySession[]
-  blocks   PlannedBlock[]
+  profile    Profile    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessions   StudySession[]
+  blocks     PlannedBlock[]
 
   @@unique([disciplineId, name])
   @@index([userId])
@@ -209,12 +210,12 @@ model Topic {
 
 model WeeklyGoal {
   id            String   @id @default(uuid())
-  userId        String   @db.Uuid
-  goalId        String?
-  weekStart     DateTime @db.Date
-  targetMinutes Int
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  userId        String   @db.Uuid @map("user_id")
+  goalId        String?  @map("goal_id")
+  weekStart     DateTime @db.Date @map("week_start")
+  targetMinutes Int      @map("target_minutes")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
   profile Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
   goal    Goal?   @relation(fields: [goalId], references: [id], onDelete: SetNull)
@@ -226,12 +227,12 @@ model WeeklyGoal {
 
 model DisciplineWeeklyGoal {
   id           String   @id @default(uuid())
-  userId       String   @db.Uuid
-  disciplineId String
-  weekStart    DateTime @db.Date
-  targetMinutes Int
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  userId       String   @db.Uuid @map("user_id")
+  disciplineId String   @map("discipline_id")
+  weekStart    DateTime @db.Date @map("week_start")
+  targetMinutes Int     @map("target_minutes")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   profile    Profile    @relation(fields: [userId], references: [id], onDelete: Cascade)
   discipline Discipline @relation(fields: [disciplineId], references: [id], onDelete: Cascade)
@@ -243,18 +244,18 @@ model DisciplineWeeklyGoal {
 
 model PlannedBlock {
   id           String             @id @default(uuid())
-  userId       String             @db.Uuid
-  weekStart    DateTime           @db.Date
-  dayOfWeek    Int /// 0 = segunda ... 6 = domingo
-  startTime    String             @db.VarChar(5) /// "HH:mm"
-  durationMin  Int
+  userId       String             @db.Uuid @map("user_id")
+  weekStart    DateTime           @db.Date @map("week_start")
+  dayOfWeek    Int                @map("day_of_week") /// 0 = segunda ... 6 = domingo
+  startTime    String             @db.VarChar(5) @map("start_time") /// "HH:mm"
+  durationMin  Int                @map("duration_min")
   status       PlannedBlockStatus @default(pending)
-  goalId       String?
-  disciplineId String?
-  topicId      String?
+  goalId       String?            @map("goal_id")
+  disciplineId String?            @map("discipline_id")
+  topicId      String?            @map("topic_id")
   label        String?            @db.VarChar(200) /// bloco ad-hoc (ex.: "Simulado") sem FK
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
+  createdAt    DateTime           @default(now()) @map("created_at")
+  updatedAt    DateTime           @updatedAt @map("updated_at")
 
   profile    Profile     @relation(fields: [userId], references: [id], onDelete: Cascade)
   goal       Goal?       @relation(fields: [goalId], references: [id], onDelete: SetNull)
@@ -269,32 +270,32 @@ model PlannedBlock {
 // ------------------------------------------------------------------ sessions
 
 model StudySession {
-  id            String        @id @default(uuid())
-  userId        String        @db.Uuid
-  goalId        String?
-  disciplineId  String?
-  topicId       String?
-  plannedBlockId String?
-  goalTitleSnap        String? @db.VarChar(200)
-  disciplineNameSnap   String? @db.VarChar(200)
-  topicNameSnap        String? @db.VarChar(200)
-  mode          SessionMode
-  status        SessionStatus @default(in_progress)
-  startedAt     DateTime
-  endedAt       DateTime?
-  durationSec   Int           @default(0) /// tempo efetivo de FOCO em segundos
-  pausedSec     Int           @default(0) /// pausas manuais (modo livre), fora do tempo efetivo
-  pomodoroCycles Int          @default(0)
-  cyclesTarget   Int          @default(4)
-  notes         String?       @db.Text
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id                  String        @id @default(uuid())
+  userId              String        @db.Uuid @map("user_id")
+  goalId              String?       @map("goal_id")
+  disciplineId        String?       @map("discipline_id")
+  topicId             String?       @map("topic_id")
+  plannedBlockId      String?       @map("planned_block_id")
+  goalTitleSnap       String?       @db.VarChar(200) @map("goal_title_snap")
+  disciplineNameSnap  String?       @db.VarChar(200) @map("discipline_name_snap")
+  topicNameSnap       String?       @db.VarChar(200) @map("topic_name_snap")
+  mode                SessionMode
+  status              SessionStatus @default(in_progress)
+  startedAt           DateTime      @map("started_at")
+  endedAt             DateTime?     @map("ended_at")
+  durationSec         Int           @default(0) @map("duration_sec") /// tempo efetivo de FOCO em segundos
+  pausedSec           Int           @default(0) @map("paused_sec") /// pausas manuais (modo livre), fora do tempo efetivo
+  pomodoroCycles      Int           @default(0) @map("pomodoro_cycles")
+  cyclesTarget        Int           @default(4) @map("cycles_target")
+  notes               String?       @db.Text
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
 
-  profile    Profile        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  goal       Goal?          @relation(fields: [goalId], references: [id], onDelete: SetNull)
-  discipline Discipline?    @relation(fields: [disciplineId], references: [id], onDelete: SetNull)
-  topic      Topic?         @relation(fields: [topicId], references: [id], onDelete: SetNull)
-  block      PlannedBlock?  @relation(fields: [plannedBlockId], references: [id], onDelete: SetNull)
+  profile Profile        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goal    Goal?          @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  discipline Discipline? @relation(fields: [disciplineId], references: [id], onDelete: SetNull)
+  topic      Topic?      @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  block      PlannedBlock? @relation(fields: [plannedBlockId], references: [id], onDelete: SetNull)
   breaks     SessionBreak[]
 
   @@index([userId, startedAt(sort: Desc)])
@@ -305,11 +306,11 @@ model StudySession {
 
 model SessionBreak {
   id          String    @id @default(uuid())
-  sessionId   String
+  sessionId   String    @map("session_id")
   type        BreakType
-  startedAt   DateTime
-  endedAt     DateTime?
-  durationSec Int
+  startedAt   DateTime  @map("started_at")
+  endedAt     DateTime? @map("ended_at")
+  durationSec Int       @map("duration_sec")
 
   session StudySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
@@ -320,24 +321,24 @@ model SessionBreak {
 // ------------------------------------------------------------------ library
 
 model Material {
-  id          String        @id @default(uuid())
-  ownerId     String?       @db.Uuid /// null = catálogo global (Explorar)
-  source      String        @db.VarChar(120)
-  externalId  String?       @db.VarChar(255)
-  url         String        @db.VarChar(1000)
-  title       String        @db.VarChar(300)
-  description String?       @db.Text
+  id          String         @id @default(uuid())
+  ownerId     String?        @db.Uuid @map("owner_id") /// null = catálogo global (Explorar)
+  source      String         @db.VarChar(120)
+  externalId  String?        @db.VarChar(255) @map("external_id")
+  url         String         @db.VarChar(1000)
+  title       String         @db.VarChar(300)
+  description String?        @db.Text
   type        MaterialType
   level       MaterialLevel?
-  language    String?       @db.VarChar(10)
+  language    String?        @db.VarChar(10)
   minutes     Int?
   rating      Float?
-  verified    Boolean       @default(false)
-  tags        String[]      @default([])
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  verified    Boolean        @default(false)
+  tags        String[]       @default([])
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
 
-  owner  Profile?        @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  owner   Profile?        @relation(fields: [ownerId], references: [id], onDelete: SetNull)
   savedBy SavedMaterial[]
 
   @@unique([source, externalId])
@@ -347,14 +348,14 @@ model Material {
 
 model SavedMaterial {
   id             String        @id @default(uuid())
-  userId         String        @db.Uuid
-  materialId     String
+  userId         String        @db.Uuid @map("user_id")
+  materialId     String        @map("material_id")
   status         LibraryStatus @default(not_started)
   progress       Int           @default(0) /// 0..100; concluido ⇔ 100
   favorite       Boolean       @default(false)
-  savedAt        DateTime      @default(now())
-  lastProgressAt DateTime?
-  completedAt    DateTime?
+  savedAt        DateTime      @default(now()) @map("saved_at")
+  lastProgressAt DateTime?     @map("last_progress_at")
+  completedAt    DateTime?     @map("completed_at")
 
   profile  Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
   material Material @relation(fields: [materialId], references: [id], onDelete: Restrict)
